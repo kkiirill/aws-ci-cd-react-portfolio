@@ -1,9 +1,15 @@
-name: Frontend CI/CD
+name: Build and Deploy FE to ECS
 
 on:
   push:
     branches:
       - "main"
+
+env:
+  ECR_REACT_PORTFOLIO_IMAGE: ${{ vars.ECR_REACT_PORTFOLIO_IMAGE }}
+  AWS_DEFAULT_REGION: ${{ vars.AWS_DEFAULT_REGION }}
+  ECS_CLUSTER: ${{ vars.ECS_CLUSTER }}
+  ECS_REACT_PORTFOLIO_SERVICE: ${{ vars.ECS_REACT_PORTFOLIO_SERVICE }}
 
 jobs:
   build:
@@ -37,24 +43,30 @@ jobs:
           name: build-artifacts
           path: build/
 
-  deploy:
+  docker:
     needs: build
     runs-on: ubuntu-latest
 
     steps:
-      - name: Download Build Artifacts
-        uses: actions/download-artifact@v2
-        with:
-          name: build-artifacts
-          path: build/
+      - name: Checkout Repository
+        uses: actions/checkout@v2
 
-      - name: Upload to S3
-        uses: jakejarvis/s3-sync-action@master
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v2
         with:
-          args: --delete
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: eu-central-1
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v1
+
+      - name: Build and Push Docker image
         env:
-          SOURCE_DIR: build/
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          AWS_DEFAULT_REGION: "eu-central-1"
-          AWS_S3_BUCKET: react-portofolio-static-site
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REPOSITORY: react-portfolio
+          IMAGE_TAG: latest
+        run: |
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG

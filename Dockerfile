@@ -1,18 +1,16 @@
-FROM node:18-alpine
+# build environment
+FROM node:20.11.0 as builder
+RUN mkdir /usr/src/app
+WORKDIR /usr/src/app
+ENV PATH /usr/src/app/node_modules/.bin:$PATH
+COPY package.json /usr/src/app/package.json
+RUN npm install --silent
+RUN npm install react-scripts@5.0.1 -g --silent
+COPY . /usr/src/app
+RUN npm run build
 
-# Set the working directory
-WORKDIR /app
-
-# Copy package.json and package-lock.json first to leverage Docker cache
-COPY package.json ./
-COPY package-lock.json ./
-
-# Install dependencies
-RUN npm install
-
-# Copy the rest of the application
-COPY public ./public
-COPY src ./src
-
-# Start the application
-CMD ["npm", "start"]
+# production environment
+FROM nginx:latest
+COPY --from=builder /usr/src/app/build /usr/share/nginx/html
+EXPOSE 80
+CMD ["nginx", "-g", "daemon off;"]
